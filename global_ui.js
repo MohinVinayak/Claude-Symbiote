@@ -178,8 +178,12 @@ function injectUI() {
   `;
 
   shadow.appendChild(style);
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
   const wrapper = document.createElement('div');
-  wrapper.innerHTML = html;
+  while (doc.body.firstChild) {
+    wrapper.appendChild(doc.body.firstChild);
+  }
   shadow.appendChild(wrapper);
 
   document.documentElement.appendChild(container);
