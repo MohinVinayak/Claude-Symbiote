@@ -252,6 +252,7 @@ function injectUI() {
       });
     } catch (err) {
       console.error("Failed to open PiP:", err);
+      alert("Failed to pop out: " + err.message);
     }
   });
 
