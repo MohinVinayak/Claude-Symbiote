@@ -35,10 +35,20 @@ function connect() {
   };
 
   ws.onmessage = (e) => {
-    // Desktop app can send commands back (future: "set_position", "ping")
     try {
       const msg = JSON.parse(e.data);
       console.log("[symbiote] ← desktop:", msg);
+
+      // Handle focus_claude command from overlay pill click
+      if (msg.command === "focus_claude") {
+        chrome.tabs.query({ url: "*://*.claude.ai/*" }, (tabs) => {
+          if (tabs && tabs.length > 0) {
+            const tab = tabs[0];
+            chrome.tabs.update(tab.id, { active: true });
+            chrome.windows.update(tab.windowId, { focused: true });
+          }
+        });
+      }
     } catch (_) {}
   };
 }

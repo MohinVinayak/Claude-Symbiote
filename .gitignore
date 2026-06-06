@@ -1,0 +1,19 @@
+# Build artifacts
+target/
+dist/
+node_modules/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Tauri dev
+src-tauri/target/
+*.log

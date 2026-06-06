@@ -6,21 +6,26 @@ use tokio::time::{sleep, Duration};
 /// On loss: calls overlay::unbond
 pub async fn run<R: Runtime>(app: AppHandle<R>) {
     let mut bonded = false;
+    let mut last_rect: Option<(i32, i32, u32, u32)> = None;
 
     loop {
         sleep(Duration::from_millis(100)).await;
 
-        match find_claude_window() {
+        match find_claude_window().await {
             Some(rect) => {
-                let (x, y, w, h) = rect;
-                // Always update position (window may have moved)
-                crate::overlay::bond_to_rect(&app, x, y, w, h);
+                // A4 FIX: Only call bond_to_rect when the rect actually changed
+                if last_rect.as_ref() != Some(&rect) {
+                    let (x, y, w, h) = rect;
+                    crate::overlay::bond_to_rect(&app, x, y, w, h);
+                    last_rect = Some(rect);
+                }
                 bonded = true;
             }
             None => {
                 if bonded {
                     crate::overlay::unbond(&app);
                     bonded = false;
+                    last_rect = None;
                 }
             }
         }
@@ -29,12 +34,12 @@ pub async fn run<R: Runtime>(app: AppHandle<R>) {
 
 /// Returns (x, y, width, height) of the Claude browser window, or None.
 /// Platform-specific implementations below.
-fn find_claude_window() -> Option<(i32, i32, u32, u32)> {
+async fn find_claude_window() -> Option<(i32, i32, u32, u32)> {
     #[cfg(target_os = "windows")]
-    return windows_find_claude();
+    return tokio::task::spawn_blocking(windows_find_claude).await.ok().flatten();
 
     #[cfg(target_os = "macos")]
-    return macos_find_claude();
+    return macos_find_claude().await;
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     None
@@ -94,11 +99,11 @@ fn windows_find_claude() -> Option<(i32, i32, u32, u32)> {
 // ─── macOS ──────────────────────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
-fn macos_find_claude() -> Option<(i32, i32, u32, u32)> {
-    use std::process::Command;
+async fn macos_find_claude() -> Option<(i32, i32, u32, u32)> {
+    use tokio::process::Command;
+    use tokio::time::timeout;
 
     // Use AppleScript to find frontmost browser window with "Claude" in title
-    // Falls back to CGWindowList approach via osascript
     let script = r#"
         tell application "System Events"
             set browserApps to {"Google Chrome", "Arc", "Firefox"}
@@ -119,11 +124,17 @@ fn macos_find_claude() -> Option<(i32, i32, u32, u32)> {
         return ""
     "#;
 
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .output()
-        .ok()?;
+    // A1 FIX: tokio::process::Command (non-blocking) + 200ms timeout guard
+    let output = timeout(
+        Duration::from_millis(200),
+        Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .output(),
+    )
+    .await
+    .ok()?  // timeout elapsed → None
+    .ok()?; // process error → None
 
     let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if s.is_empty() {
