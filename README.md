@@ -1,136 +1,54 @@
-# Symbiote
+# Symbiote — Claude Monitor
 
-Desktop overlay that bonds to your Claude.ai browser window and renders live generation state.
+Symbiote is a sleek, cross-browser extension (Chrome & Firefox) that monitors your Claude.ai generation state and displays it in a beautiful, globally-floating pill on your screen.
 
-```
-Extension (content.js)          background.js           Tauri (ws_server.rs)         Overlay (index.html)
-┌─────────────────────┐       ┌──────────────┐       ┌─────────────────────┐       ┌──────────────────┐
-│ DOM mutations        │──────▶│ MV3 service  │──WS──▶│ tokio-tungstenite   │──WS──▶│ CSS pill + SVG   │
-│ SSE fetch intercept  │       │ worker       │◀──WS──│ broadcast relay     │◀──WS──│ click → focus    │
-│ State machine (6 st) │       │ reconnect    │       │ port 7429           │       │ state animations │
-└─────────────────────┘       └──────────────┘       └─────────────────────┘       └──────────────────┘
-                                                              │
-                                                     window_tracker.rs
-                                                     Win32 EnumWindows / macOS osascript
-                                                     10 Hz polling → overlay.bond_to_rect()
-```
+Never wonder if Claude has finished writing again! Keep working in your IDE or browsing other tabs while Symbiote keeps you informed.
 
-## How it works
+## Features
 
-1. **Content script** observes DOM mutations and intercepts SSE `fetch` streams on `claude.ai` to detect state transitions in real time — stop button presence, code block growth heuristics, and 1.5s silence timeout for stream-end detection.
+- **Global Overlay:** A stunning, dark-themed floating pill injected into every tab.
+- **Live Status:** Tracks `Idle`, `Thinking...`, `Writing...`, `Writing code...`, `Error`, and `Done`.
+- **Smart "Done" State:** If Claude finishes while you are on another tab, the pill will display "Done" indefinitely until you switch back to the Claude tab, ensuring you never miss a completion.
+- **Multi-Tab Support:** Have multiple Claude tabs open? Symbiote intelligently prioritizes actively generating tabs over idle ones.
+- **Drag-to-Dismiss (Global Hide):** Click and drag the pill to move it around. Drag it to the bottom "Trash" zone to dismiss it. This hides the pill globally across all tabs!
+- **Master Toggle:** Click the Symbiote extension icon in your browser toolbar to instantly hide or show the overlay globally.
+- **Click-to-Focus:** Click the pill (without dragging) to instantly jump back to your active Claude tab.
+- **Picture-in-Picture (Pop Out):** Click the "Pop Out" icon to spawn a real OS-level window that floats over your entire desktop (even over other apps like VS Code or Spotify!).
 
-2. **Background service worker** maintains a persistent WebSocket to `ws://127.0.0.1:7429` with exponential backoff reconnect (500ms → 5s cap). A 24-second keepalive alarm prevents MV3 service worker termination.
+## Architecture
 
-3. **Tauri WS server** (`tokio-tungstenite`) accepts multiple clients and broadcasts every message to all other connected peers — this is how extension state reaches the overlay, and how the overlay's `focus_claude` click command reaches back to the extension.
+Symbiote is a 100% pure browser extension built with Manifest V3. It does not require any desktop companion apps to run.
 
-4. **Window tracker** polls `Win32::EnumWindows` (Windows) or `osascript` (macOS) at 10 Hz, locates the browser window whose title contains "Claude", and positions the transparent always-on-top overlay pill at its bottom edge.
+- `content.js`: Injected into `claude.ai` to monitor DOM mutations for generation states.
+- `intercept.js`: Injected into `claude.ai`'s `MAIN` world to intercept Server-Sent Events (SSE) for zero-latency chunk detection.
+- `background.js`: The central Service Worker that manages global state, handles multi-tab logic, and broadcasts updates.
+- `global_ui.js`: Injected into `<all_urls>` to render the Shadow DOM floating pill, drag logic, and PiP window management.
 
-5. **Clicking the pill** sends `{ command: "focus_claude" }` back through the WS bridge → extension calls `chrome.tabs.update()` to bring the Claude tab into focus.
+## Installation for Development
 
-## State machine
+1. Open Chrome and navigate to `chrome://extensions`.
+2. Enable **Developer mode** in the top right.
+3. Click **Load unpacked** and select the folder containing this repository.
+4. Refresh your tabs to see the pill!
 
-```
-IDLE → THINKING → STREAMING_TEXT ↔ STREAMING_CODE → DONE → IDLE
-             ↘ ERROR ↗
-```
+## Publishing to Web Stores
 
-| State | Trigger | Visual |
-|---|---|---|
-| `idle` | No stop button, no error | Muted icon, "Idle" |
-| `thinking` | Thinking dots visible, no stop button | Animated gradient text + spinning icon |
-| `streaming_text` | Stop button present, no active code block | Pulsing icon, "Writing…" |
-| `streaming_code` | Stop button + code block actively growing | Gold icon, "Writing code…" |
-| `error` | `[role="alert"]` detected or fetch rejection | Red icon, "Something went wrong" |
-| `done` | Stop button disappears → 2s → idle | "Done ✓" then fades to idle |
+The `manifest.json` is configured to be cross-compatible with both Chrome and Firefox out of the box.
 
-## Stack
+### Chrome Web Store
+1. Zip the extension files: `manifest.json`, `background.js`, `content.js`, `intercept.js`, `global_ui.js`, and the `icons/` folder.
+2. Go to the [Chrome Developer Dashboard](https://chrome.google.com/webstore/devconsole/).
+3. Create a **New Item**, upload the `.zip` file, and fill out the store listing details.
+4. Under Privacy, declare the "Storage" and "Tabs" permissions.
 
-| Layer | Tech | Why |
-|---|---|---|
-| Desktop app | Tauri 2.0 (Rust) | 3MB binary, native window control, no Electron bloat |
-| Window tracking | Win32 `EnumWindows` / macOS `osascript` | Zero-dependency OS window rect polling |
-| IPC | `tokio-tungstenite` on port 7429 | Async bidirectional relay, <1ms latency |
-| State detection | MV3 content script | DOM observer + SSE intercept — no page injection |
-| Overlay UI | Vanilla HTML/CSS/SVG | Zero JS dependencies in production |
+### Firefox Add-ons (AMO)
+1. Zip the exact same files as above.
+2. Go to the [Firefox Extension Workshop Developer Hub](https://addons.mozilla.org/en-US/developers/).
+3. Submit a new Add-on, upload the `.zip`, and wait for the automated linter to approve the pure JavaScript files.
+4. Note: The `manifest.json` already contains the required `browser_specific_settings` block for Firefox.
 
-## Quick start
-
-### Prerequisites
-
-```bash
-# Rust toolchain
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Tauri CLI
-cargo install tauri-cli --version "^2.0"
-
-# Windows: WebView2 (pre-installed on Win11)
-# macOS: Xcode Command Line Tools
-xcode-select --install
-```
-
-### Development
-
-```bash
-cargo tauri dev
-```
-
-### Production build
-
-```bash
-# Windows — NSIS installer
-cargo tauri build --bundles nsis
-
-# macOS — DMG
-cargo tauri build --bundles dmg
-```
-
-Binaries land in `src-tauri/target/release/bundle/`.
-
-### Browser extension
-
-1. `chrome://extensions` → Developer mode → **Load unpacked**
-2. Select the project root (where `manifest.json` lives)
-3. Navigate to `claude.ai` — the extension activates automatically
-
-## Project structure
-
-```
-symbiote/
-├── src-tauri/src/
-│   ├── lib.rs              # Tauri app setup, tray icon, event wiring
-│   ├── overlay.rs          # Window position, click-through, show/hide
-│   ├── ws_server.rs        # tokio-tungstenite WS server — broadcast relay
-│   └── window_tracker.rs   # OS window polling (Win32 / osascript)
-├── index.html              # Overlay UI — pill + state animations
-├── manifest.json           # MV3 extension manifest
-├── content.js              # DOM observer + SSE intercept + state machine
-└── background.js           # Service worker — WS client + tab focus handler
-```
-
-## Cargo release profile
-
-```toml
-[profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = "symbols"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = [
-  "Win32_Foundation",
-  "Win32_UI_WindowsAndMessaging",
-]}
-```
-
-## Known limitations
-
-- macOS `osascript` window detection has ~100ms latency — a `CGWindowListCopyWindowInfo` C binding would be faster
-- Linux not supported — Wayland transparent overlays require compositor-specific APIs
-- Extension icons are placeholders — need production icon assets at 16/48/128px
-
-## License
-
-MIT
+## Permissions Required
+- `tabs`: Used to query open tabs for broadcasting state updates and jumping to the active Claude tab.
+- `storage`: Used to persist the global UI visibility state (so if you hide the pill, it stays hidden on reload).
+- `alarms`: Used to keep the background service worker alive while Claude is generating.
+- `host_permissions`: `<all_urls>` to inject the floating pill everywhere, and `*://*.claude.ai/*` for monitoring generation.
