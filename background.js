@@ -5,8 +5,55 @@
  * Broadcasts state updates to all tabs so the overlay updates everywhere.
  */
 
+let tabStates = {};
 let currentState = { state: "idle", event: "init", ts_ms: Date.now() };
 let isVisible = true;
+
+const STATE_PRIORITY = {
+  streaming_code: 6,
+  streaming_text: 5,
+  thinking: 4,
+  error: 3,
+  done: 2,
+  idle: 1,
+  disconnected: 0
+};
+
+function getDominantState() {
+  let bestState = { state: "idle", event: "init", ts_ms: Date.now() };
+  let maxPrio = -1;
+  let mostRecent = 0;
+
+  for (const stateObj of Object.values(tabStates)) {
+    const prio = STATE_PRIORITY[stateObj.state] || 0;
+    if (prio > maxPrio || (prio === maxPrio && stateObj.ts_ms > mostRecent)) {
+      maxPrio = prio;
+      mostRecent = stateObj.ts_ms;
+      bestState = stateObj;
+    }
+  }
+  return bestState;
+}
+
+function updateAndBroadcastState() {
+  const domState = getDominantState();
+  currentState = domState;
+  
+  chrome.tabs.query({}, (tabs) => {
+    for (const tab of tabs) {
+      try {
+        chrome.tabs.sendMessage(tab.id, { type: "STATE_UPDATE", payload: currentState }, () => chrome.runtime.lastError);
+      } catch (e) {}
+    }
+  });
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabStates[tabId]) {
+    delete tabStates[tabId];
+    updateAndBroadcastState();
+  }
+});
 
 // Load initial visibility state
 chrome.storage.local.get(["isVisible"], (res) => {
@@ -35,16 +82,13 @@ chrome.action.onClicked.addListener((tab) => {
 // ── Receive state from content script & commands from UI ────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "CLAUDE_EVENT") {
-    currentState = msg.payload;
-    
-    // Broadcast the state update to ALL tabs
-    chrome.tabs.query({}, (tabs) => {
-      for (const tab of tabs) {
-        try {
-          chrome.tabs.sendMessage(tab.id, { type: "STATE_UPDATE", payload: currentState }, () => chrome.runtime.lastError);
-        } catch (e) {}
-      }
-    });
+    if (sender.tab) {
+      tabStates[sender.tab.id] = msg.payload;
+    } else {
+      // Fallback if no tab id (unlikely for content script)
+      tabStates['unknown'] = msg.payload;
+    }
+    updateAndBroadcastState();
   }
 
   if (msg.type === "SET_VISIBILITY") {

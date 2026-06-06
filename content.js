@@ -109,21 +109,37 @@ function handleMutations() {
   }
 
   // No stop button, no error, no thinking — if we were streaming, we're done
-  if (currentState !== STATES.IDLE && currentState !== STATES.DONE) {
-    codeBlockOpen = false;
-    transition(STATES.DONE, "state_change");
-    setTimeout(() => transition(STATES.IDLE, "state_change"), 2000);
+  if (currentState !== STATES.IDLE && currentState !== STATES.DONE && currentState !== STATES.ERROR) {
+    finishGeneration();
   }
 }
 
 function checkDone() {
   const stopBtn = document.querySelector(SELECTORS.stopButton);
-  if (!stopBtn && currentState !== STATES.IDLE) {
-    codeBlockOpen = false;
-    transition(STATES.DONE, "state_change");
+  if (!stopBtn && currentState !== STATES.IDLE && currentState !== STATES.DONE && currentState !== STATES.ERROR) {
+    finishGeneration();
+  }
+}
+
+function finishGeneration() {
+  codeBlockOpen = false;
+  transition(STATES.DONE, "state_change");
+  
+  // If the user is actively watching, return to idle shortly.
+  // If hidden, stay DONE until they come back.
+  if (document.visibilityState === 'visible') {
     setTimeout(() => transition(STATES.IDLE, "state_change"), 2000);
   }
 }
+
+// Clear sticky DONE/ERROR states when the user switches back to this tab
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === 'visible') {
+    if (currentState === STATES.DONE || currentState === STATES.ERROR) {
+      setTimeout(() => transition(STATES.IDLE, "state_change"), 1500);
+    }
+  }
+});
 
 /** Heuristic: a code block is "actively growing" if it gained chars recently */
 const codeBlockSizes = new WeakMap();

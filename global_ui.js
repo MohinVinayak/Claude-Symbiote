@@ -3,10 +3,11 @@
  * 
  * Injects the Symbiote floating pill overlay.
  * Listens to background.js for state updates.
- * Supports dragging and drag-to-dismiss (global visibility toggle).
+ * Supports dragging, drag-to-dismiss, and Picture-in-Picture.
  */
 
 let ui = null;
+let currentGlobalState = "idle"; // keep track of state for PiP sync
 
 function injectUI() {
   if (document.getElementById("symbiote-overlay-root")) return null;
@@ -17,8 +18,8 @@ function injectUI() {
     position: fixed;
     top: 0; left: 0; width: 100vw; height: 100vh;
     z-index: 2147483647; /* max z-index */
-    pointer-events: none; /* Let clicks pass through by default */
-    display: none; /* hidden by default until we get visibility state */
+    pointer-events: none;
+    display: none;
   `;
 
   const shadow = container.attachShadow({ mode: "closed" });
@@ -36,7 +37,7 @@ function injectUI() {
       justify-content: center;
       gap: 12px;
       background: #1a1a1a;
-      padding: 12px 24px 12px 18px;
+      padding: 12px 18px 12px 18px;
       border-radius: 50px;
       border: 1px solid rgba(255, 255, 255, 0.1);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
@@ -102,6 +103,28 @@ function injectUI() {
       white-space: nowrap;
     }
 
+    #pip-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.4;
+      transition: opacity 0.2s;
+      padding: 4px;
+      border-radius: 4px;
+    }
+    #pip-btn:hover {
+      opacity: 1;
+      background: rgba(255,255,255,0.1);
+    }
+    #pip-btn svg {
+      width: 14px;
+      height: 14px;
+      fill: #fff;
+    }
+
     /* Dismiss Zone */
     #dismiss-zone {
       position: absolute;
@@ -145,6 +168,9 @@ function injectUI() {
         </svg>
       </div>
       <span id="status-text">Idle</span>
+      <button id="pip-btn" title="Pop out">
+        <svg viewBox="0 0 24 24"><path d="M19 11h-8v6h8v-6zm4 8V5c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 0H3V5h18v14z"/></svg>
+      </button>
     </div>
     <div id="dismiss-zone">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
@@ -160,14 +186,77 @@ function injectUI() {
 
   const pill = shadow.getElementById('pill-container');
   const dismissZone = shadow.getElementById('dismiss-zone');
+  const pipBtn = shadow.getElementById('pip-btn');
   
   // Dragging state
   let isDragging = false;
   let hasMoved = false; // to distinguish click from drag
   let startX = 0, startY = 0;
   let currentX = 0, currentY = 0;
+  let isPipActive = false;
+  let pipWindowObj = null;
+
+  pipBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!('documentPictureInPicture' in window)) {
+      alert("Your browser does not support Document Picture-in-Picture.");
+      return;
+    }
+
+    if (isPipActive) return;
+
+    try {
+      pipWindowObj = await window.documentPictureInPicture.requestWindow({
+        width: 170,
+        height: 48,
+      });
+      isPipActive = true;
+
+      // Make PiP background perfectly match the pill
+      pipWindowObj.document.body.style.margin = "0";
+      pipWindowObj.document.body.style.padding = "0";
+      pipWindowObj.document.body.style.background = "#1a1a1a";
+      pipWindowObj.document.body.style.display = "flex";
+      pipWindowObj.document.body.style.alignItems = "center";
+      pipWindowObj.document.body.style.justifyContent = "center";
+      pipWindowObj.document.body.style.overflow = "hidden";
+
+      // Inject styles into PiP
+      const pipStyle = document.createElement('style');
+      pipStyle.textContent = style.textContent;
+      // Override pill styles inside PiP so it fills the window cleanly without shadows/borders
+      pipStyle.textContent += `
+        #pill-container {
+          position: static;
+          border: none;
+          box-shadow: none;
+          transform: none !important;
+          cursor: default;
+          width: 100%;
+          height: 100%;
+          border-radius: 0;
+        }
+        #pip-btn { display: none; }
+      `;
+      pipWindowObj.document.head.appendChild(pipStyle);
+
+      // Move pill to PiP
+      pipWindowObj.document.body.appendChild(pill);
+      container.style.display = 'none'; // hide our main container
+
+      // Listen for PiP close to bring it back
+      pipWindowObj.addEventListener("pagehide", (event) => {
+        isPipActive = false;
+        wrapper.appendChild(pill); // put it back
+        container.style.display = 'block'; // show our container again
+      });
+    } catch (err) {
+      console.error("Failed to open PiP:", err);
+    }
+  });
 
   pill.addEventListener('pointerdown', (e) => {
+    if (isPipActive) return; // Don't allow dragging inside PiP
     if (e.button !== 0) return; // Only left click
     isDragging = true;
     hasMoved = false;
@@ -180,9 +269,8 @@ function injectUI() {
   });
 
   pill.addEventListener('pointermove', (e) => {
-    if (!isDragging) return;
+    if (!isDragging || isPipActive) return;
     
-    // Check if moved enough to be considered a drag
     if (Math.abs(e.clientX - startX - currentX) > 3 || Math.abs(e.clientY - startY - currentY) > 3) {
       hasMoved = true;
     }
@@ -191,10 +279,8 @@ function injectUI() {
       currentX = e.clientX - startX;
       currentY = e.clientY - startY;
       
-      // Apply transform
       pill.style.transform = `translate(${currentX}px, ${currentY}px)`;
 
-      // Collision detection with dismiss zone
       const pillRect = pill.getBoundingClientRect();
       const dismissRect = dismissZone.getBoundingClientRect();
       
@@ -214,7 +300,7 @@ function injectUI() {
   });
 
   pill.addEventListener('pointerup', (e) => {
-    if (!isDragging) return;
+    if (!isDragging || isPipActive) return;
     isDragging = false;
     pill.releasePointerCapture(e.pointerId);
     pill.classList.remove('dragging');
@@ -224,17 +310,14 @@ function injectUI() {
     dismissZone.classList.remove('hover');
 
     if (isHoveringDismiss) {
-      // Dismiss triggered
       pill.classList.add('dismissing');
       
-      // Tell background to save global state
       try {
         if (chrome.runtime && chrome.runtime.id) {
           chrome.runtime.sendMessage({ type: "SET_VISIBILITY", payload: false }, () => chrome.runtime.lastError);
         }
       } catch (err) {}
       
-      // Reset position for when it comes back
       setTimeout(() => {
         pill.classList.remove('dismissing');
         currentX = 0; currentY = 0;
@@ -244,7 +327,6 @@ function injectUI() {
     }
 
     if (!hasMoved) {
-      // It was a click, not a drag. Focus Claude.
       try {
         if (chrome.runtime && chrome.runtime.id) {
           chrome.runtime.sendMessage({ type: 'FOCUS_CLAUDE' }, () => chrome.runtime.lastError);
@@ -273,6 +355,7 @@ const STATE_CONFIGS = {
 
 function updateUI(state) {
   if (!ui) return;
+  currentGlobalState = state.state;
   const config = STATE_CONFIGS[state.state] || STATE_CONFIGS.idle;
 
   ui.pill.classList.remove('active', 'error');
@@ -292,7 +375,11 @@ function updateUI(state) {
 
 function setVisibility(isVisible) {
   if (!ui) return;
-  ui.container.style.display = isVisible ? 'block' : 'none';
+  // If PiP is active, we don't touch the container visibility, 
+  // but if it's inactive, we respect the global state.
+  if (!document.pictureInPictureElement) {
+     ui.container.style.display = isVisible ? 'block' : 'none';
+  }
 }
 
 // Init
