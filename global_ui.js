@@ -196,6 +196,9 @@ function injectUI() {
   let isPipActive = false;
   let pipWindowObj = null;
 
+  pipBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+  pipBtn.addEventListener('pointerup', (e) => e.stopPropagation());
+  
   pipBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (!('documentPictureInPicture' in window)) {
