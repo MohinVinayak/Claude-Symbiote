@@ -155,13 +155,12 @@ function injectUI() {
   container.id = "symbiote-overlay-root";
   container.style.cssText = `
     position: fixed;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
+    top: 24px;
+    right: 24px;
     z-index: 2147483647; /* max z-index */
     pointer-events: auto;
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
   `;
 
   const shadow = container.attachShadow({ mode: "closed" });
