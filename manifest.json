@@ -5,8 +5,10 @@
   "description": "Shows live Claude.ai generation status in a sleek floating pill overlay.",
   "permissions": [
     "tabs",
-    "alarms"
+    "alarms",
+    "storage"
   ],
+  "action": {},
   "host_permissions": [
     "*://*.claude.ai/*",
     "<all_urls>"

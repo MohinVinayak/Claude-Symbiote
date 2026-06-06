@@ -6,6 +6,31 @@
  */
 
 let currentState = { state: "idle", event: "init", ts_ms: Date.now() };
+let isVisible = true;
+
+// Load initial visibility state
+chrome.storage.local.get(["isVisible"], (res) => {
+  if (res.isVisible !== undefined) {
+    isVisible = res.isVisible;
+  }
+});
+
+function broadcastVisibility() {
+  chrome.tabs.query({}, (tabs) => {
+    for (const tab of tabs) {
+      try {
+        chrome.tabs.sendMessage(tab.id, { type: "VISIBILITY_UPDATE", payload: isVisible }, () => chrome.runtime.lastError);
+      } catch (e) {}
+    }
+  });
+}
+
+// Toggle visibility when clicking the extension icon
+chrome.action.onClicked.addListener((tab) => {
+  isVisible = !isVisible;
+  chrome.storage.local.set({ isVisible });
+  broadcastVisibility();
+});
 
 // ── Receive state from content script & commands from UI ────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -16,20 +41,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.tabs.query({}, (tabs) => {
       for (const tab of tabs) {
         try {
-          chrome.tabs.sendMessage(tab.id, { type: "STATE_UPDATE", payload: currentState }, () => {
-            if (chrome.runtime.lastError) {
-              // Ignore errors for tabs that don't have the content script injected (e.g., chrome:// pages)
-            }
-          });
-        } catch (e) {
-          // Ignore synchronous exceptions
-        }
+          chrome.tabs.sendMessage(tab.id, { type: "STATE_UPDATE", payload: currentState }, () => chrome.runtime.lastError);
+        } catch (e) {}
       }
     });
   }
 
+  if (msg.type === "SET_VISIBILITY") {
+    isVisible = msg.payload;
+    chrome.storage.local.set({ isVisible });
+    broadcastVisibility();
+  }
+
   if (msg.type === "GET_STATE") {
-    sendResponse(currentState);
+    sendResponse({ state: currentState, isVisible });
   }
 
   if (msg.type === "FOCUS_CLAUDE") {
