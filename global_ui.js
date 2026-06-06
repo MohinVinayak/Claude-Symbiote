@@ -192,6 +192,10 @@ function injectUI() {
   const dismissZone = shadow.getElementById('dismiss-zone');
   const pipBtn = shadow.getElementById('pip-btn');
   
+  if (!('documentPictureInPicture' in window)) {
+    pipBtn.style.display = 'none';
+  }
+  
   // Dragging state
   let isDragging = false;
   let hasMoved = false; // to distinguish click from drag
