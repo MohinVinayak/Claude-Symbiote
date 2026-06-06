@@ -37,7 +37,9 @@ function transition(newState, event, metadata = null) {
 function send(payload) {
   try {
     if (chrome.runtime && chrome.runtime.id) {
-      chrome.runtime.sendMessage({ type: "CLAUDE_EVENT", payload }).catch(() => {});
+      chrome.runtime.sendMessage({ type: "CLAUDE_EVENT", payload }, () => {
+        if (chrome.runtime.lastError) {}
+      });
     }
   } catch (e) {}
 }

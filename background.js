@@ -15,7 +15,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // Broadcast the state update to ALL tabs
     chrome.tabs.query({}, (tabs) => {
       for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: "STATE_UPDATE", payload: currentState }).catch(() => {});
+        try {
+          chrome.tabs.sendMessage(tab.id, { type: "STATE_UPDATE", payload: currentState }, () => {
+            if (chrome.runtime.lastError) {
+              // Ignore errors for tabs that don't have the content script injected (e.g., chrome:// pages)
+            }
+          });
+        } catch (e) {
+          // Ignore synchronous exceptions
+        }
       }
     });
   }

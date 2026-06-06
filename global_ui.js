@@ -109,7 +109,9 @@ function injectUI() {
   pill.addEventListener('click', () => {
     try {
       if (chrome.runtime && chrome.runtime.id) {
-        chrome.runtime.sendMessage({ type: 'FOCUS_CLAUDE' }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'FOCUS_CLAUDE' }, () => {
+          if (chrome.runtime.lastError) {}
+        });
       }
     } catch (e) {}
   });
