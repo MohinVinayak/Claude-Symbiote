@@ -13,7 +13,7 @@ Never wonder if Claude has finished writing again! Keep working in your IDE or b
 - **Drag-to-Dismiss (Global Hide):** Click and drag the pill to move it around. Drag it to the bottom "Trash" zone to dismiss it. This hides the pill globally across all tabs!
 - **Master Toggle:** Click the Symbiote extension icon in your browser toolbar to instantly hide or show the overlay globally.
 - **Click-to-Focus:** Click the pill (without dragging) to instantly jump back to your active Claude tab.
-- **Picture-in-Picture (Pop Out):** Click the "Pop Out" icon to spawn a real OS-level window that floats over your entire desktop (even over other apps like VS Code or Spotify!).
+- **Picture-in-Picture (Pop Out):** *(Chrome/Edge/Brave only)* Click the "Pop Out" icon to spawn a real OS-level window that floats over your entire desktop (even over other apps like VS Code or Spotify!).
 
 ## Architecture
 
