@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Symbiote — Liquid Glass Claude Monitor</title>
+<meta name="description" content="Interactive demo of Symbiote: a liquid-glass desktop overlay that bonds to your Claude window and renders live generation state with a pixel-art companion." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #07080d;
+    --surface: rgba(255,255,255,0.04);
+    --surface-hover: rgba(255,255,255,0.07);
+    --border: rgba(255,255,255,0.08);
+    --border-bright: rgba(255,255,255,0.15);
+    --text: #e8eaf0;
+    --text-muted: #7a8099;
+    --text-dim: #3d4259;
+    --accent: #6c63ff;
+    --accent-glow: rgba(108,99,255,0.3);
+
+    /* state colours */
+    --c-idle:    #8892b0;
+    --c-think:   #4a9eff;
+    --c-text:    #1de9b6;
+    --c-code:    #ffab40;
+    --c-error:   #ff4444;
+    --c-done:    #ffd740;
+  }
+
+  html, body {
+    width: 100%; min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* ─── grid noise texture overlay ──────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(108,99,255,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 80% at 80% 90%, rgba(29,233,182,0.07) 0%, transparent 60%),
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px);
+    pointer-events: none;
+  }
+
+  main { position: relative; z-index: 1; }
+
+  /* ─── header ──────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 24px 48px;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    background: rgba(7,8,13,0.7);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 18px; font-weight: 600; letter-spacing: -0.3px;
+  }
+  .logo-hex {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, #6c63ff, #1de9b6);
+    clip-path: polygon(50% 0%,95% 25%,95% 75%,50% 100%,5% 75%,5% 25%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; color: #fff;
+    animation: hexPulse 3s ease-in-out infinite;
+  }
+  @keyframes hexPulse {
+    0%,100% { filter: drop-shadow(0 0 4px rgba(108,99,255,0.4)); }
+    50%      { filter: drop-shadow(0 0 12px rgba(29,233,182,0.6)); }
+  }
+  .version-badge {
+    font-size: 11px; font-weight: 500;
+    background: rgba(108,99,255,0.15);
+    color: #9d96ff;
+    border: 1px solid rgba(108,99,255,0.3);
+    border-radius: 20px; padding: 2px 10px;
+    letter-spacing: 0.5px;
+  }
+  .header-links { display: flex; gap: 8px; }
+  .btn {
+    font-family: 'Inter', sans-serif;
+    font-size: 13px; font-weight: 500;
+    padding: 7px 16px; border-radius: 8px;
+    border: 1px solid var(--border-bright);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { background: var(--surface-hover); border-color: rgba(255,255,255,0.25); }
+  .btn-primary {
+    background: linear-gradient(135deg, #6c63ff 0%, #4fc3f7 100%);
+    border-color: transparent; color: #fff;
+  }
+  .btn-primary:hover { filter: brightness(1.1); background: linear-gradient(135deg, #7c73ff 0%, #5fd3ff 100%); }
+
+  /* ─── hero ────────────────────────────────────────── */
+  .hero {
+    text-align: center;
+    padding: 80px 48px 60px;
+  }
+  .hero-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 20px;
+  }
+  .hero-tag::before, .hero-tag::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    width: 40px;
+  }
+  h1 {
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 700; line-height: 1.1; letter-spacing: -2px;
+    background: linear-gradient(135deg, #fff 0%, #c8c0ff 40%, #1de9b6 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 20px;
+  }
+  .hero-sub {
+    font-size: 18px; font-weight: 400; color: var(--text-muted);
+    max-width: 560px; margin: 0 auto 40px; line-height: 1.6;
+  }
+  .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+  /* ─── section layout ──────────────────────────────── */
+  section { padding: 60px 48px; max-width: 1200px; margin: 0 auto; }
+  .section-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 8px;
+  }
+  .section-title {
+    font-size: 28px; font-weight: 600; letter-spacing: -0.5px;
+    margin-bottom: 40px; color: var(--text);
+  }
+
+  /* ─── PILL DEMO STAGE ─────────────────────────────── */
+  .stage {
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 60px 40px;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 40px;
+    position: relative; overflow: hidden;
+  }
+  .stage::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 100% 60% at 50% 0%, rgba(108,99,255,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* mock desktop frame */
+  .desktop-frame {
+    width: 100%; max-width: 800px;
+    background: #0e0f1a;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+  }
+  .desktop-titlebar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 16px;
+    background: #161720;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .traffic-light {
+    width: 12px; height: 12px; border-radius: 50%;
+  }
+  .traffic-light.red    { background: #ff5f57; }
+  .traffic-light.yellow { background: #ffbd2e; }
+  .traffic-light.green  { background: #28c840; }
+  .desktop-url {
+    flex: 1; text-align: center;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--text-muted);
+    background: rgba(255,255,255,0.04);
+    border-radius: 6px; padding: 4px 12px;
+    max-width: 320px; margin: 0 auto;
+  }
+  .desktop-content {
+    padding: 32px;
+    min-height: 280px;
+    position: relative;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+
+  /* fake claude.ai UI */
+  .claude-prompt {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 16px 20px;
+    font-size: 14px; color: var(--text-muted);
+    font-family: 'Inter', sans-serif;
+  }
+  .claude-response {
+    display: flex; gap: 12px;
+  }
+  .claude-avatar {
+    width: 32px; height: 32px; flex-shrink: 0;
+    background: linear-gradient(135deg, #cc785c, #bf5a3c);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; color: #fff;
+  }
+  .claude-bubble {
+    flex: 1; font-size: 14px; color: var(--text-muted); line-height: 1.65;
+  }
+  .cursor-blink {
+    display: inline-block; width: 2px; height: 14px;
+    background: var(--c-text); margin-left: 2px; vertical-align: middle;
+    animation: blink 0.8s step-end infinite;
+  }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+  .code-preview {
+    background: #0d0e17; border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 12px 16px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: #adf; line-height: 1.7;
+  }
+
+  /* ─── THE PILL ────────────────────────────────────── */
+  .pill-wrapper {
+    position: absolute;
+    bottom: 16px; right: 16px;
+    width: 280px; height: 52px;
+    filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5));
+  }
+  #pill-canvas {
+    width: 100%; height: 100%;
+    border-radius: 26px;
+  }
+  .pill-inner {
+    position: absolute; inset: 0;
+    display: flex; align-items: center;
+    padding: 0 10px 0 14px;
+    pointer-events: none;
+  }
+  .pill-state-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0; margin-right: 10px;
+    transition: background 0.4s ease, box-shadow 0.4s ease;
+  }
+  #osc-canvas {
+    flex: 1; height: 24px;
+    opacity: 0.85;
+  }
+  .companion-canvas {
+    width: 32px; height: 44px;
+    image-rendering: pixelated;
+    flex-shrink: 0; margin-left: 6px;
+  }
+
+  /* ─── STATE CONTROLS ──────────────────────────────── */
+  .state-controls {
+    display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+  }
+  .state-btn {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px; font-weight: 500;
+    padding: 8px 18px; border-radius: 20px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex; align-items: center; gap: 7px;
+    letter-spacing: 0.3px;
+  }
+  .state-btn .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  .state-btn[data-state="idle"]           { background: rgba(136,146,176,0.1); border-color: rgba(136,146,176,0.3); color: var(--c-idle); }
+  .state-btn[data-state="thinking"]       { background: rgba(74,158,255,0.1);  border-color: rgba(74,158,255,0.3);  color: var(--c-think); }
+  .state-btn[data-state="streaming_text"] { background: rgba(29,233,182,0.1);  border-color: rgba(29,233,182,0.3);  color: var(--c-text); }
+  .state-btn[data-state="streaming_code"] { background: rgba(255,171,64,0.1);  border-color: rgba(255,171,64,0.3);  color: var(--c-code); }
+  .state-btn[data-state="error"]          { background: rgba(255,68,68,0.1);   border-color: rgba(255,68,68,0.3);   color: var(--c-error); }
+  .state-btn[data-state="done"]           { background: rgba(255,215,64,0.1);  border-color: rgba(255,215,64,0.3);  color: var(--c-done); }
+
+  .state-btn.active { filter: brightness(1.4); transform: scale(1.05); }
+  .state-btn:hover  { filter: brightness(1.2); }
+
+  /* dot colours */
+  .state-btn[data-state="idle"]           .dot { background: var(--c-idle); }
+  .state-btn[data-state="thinking"]       .dot { background: var(--c-think); }
+  .state-btn[data-state="streaming_text"] .dot { background: var(--c-text); }
+  .state-btn[data-state="streaming_code"] .dot { background: var(--c-code); }
+  .state-btn[data-state="error"]          .dot { background: var(--c-error); }
+  .state-btn[data-state="done"]           .dot { background: var(--c-done); }
+
+  /* ─── SETTINGS PANEL ──────────────────────────────── */
+  .settings-panel {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 16px; padding: 24px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  }
+  .setting-row { display: flex; flex-direction: column; gap: 8px; }
+  .setting-label {
+    font-size: 12px; font-weight: 500; color: var(--text-muted);
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .setting-control { display: flex; align-items: center; gap: 10px; }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    flex: 1; height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,0.1); outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--accent); cursor: pointer;
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .toggle {
+    width: 40px; height: 22px; border-radius: 11px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid var(--border);
+    cursor: pointer; position: relative;
+    transition: background 0.2s;
+  }
+  .toggle.on { background: var(--accent); border-color: var(--accent); }
+  .toggle::after {
+    content: ''; position: absolute;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; top: 2px; left: 2px;
+    transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .toggle.on::after { left: 20px; }
+  .setting-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); min-width: 30px; }
+
+  /* ─── ARCHITECTURE DIAGRAM ────────────────────────── */
+  .arch-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+    align-items: start;
+  }
+  .arch-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .arch-card:hover { background: var(--surface-hover); border-color: var(--border-bright); }
+  .arch-card-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; margin-bottom: 12px;
+  }
+  .arch-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .arch-card p  { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+  .arch-arrow {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: var(--text-dim); padding: 16px 0;
+  }
+  .tech-pill {
+    display: inline-flex; align-items: center;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    background: rgba(108,99,255,0.1); color: #9d96ff;
+    border: 1px solid rgba(108,99,255,0.2);
+    border-radius: 4px; padding: 2px 7px; margin-top: 8px; margin-right: 4px;
+  }
+
+  /* ─── STATE TIMELINE ──────────────────────────────── */
+  .timeline {
+    display: flex; gap: 0; align-items: stretch;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden;
+  }
+  .timeline-step {
+    flex: 1; padding: 16px 12px;
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 6px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .timeline-step:last-child { border-right: none; }
+  .timeline-step:hover { background: rgba(255,255,255,0.03); }
+  .timeline-step.active { background: rgba(255,255,255,0.05); }
+  .timeline-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .timeline-name { font-size: 12px; font-weight: 600; }
+  .timeline-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+
+  /* ─── footer ──────────────────────────────────────── */
+  footer {
+    text-align: center; padding: 40px 48px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim); font-size: 13px;
+  }
+  footer a { color: var(--text-muted); text-decoration: none; }
+  footer a:hover { color: var(--text); }
+
+  /* ─── disconnect overlay ──────────────────────────── */
+  #disc-overlay {
+    position: absolute; inset: 0; border-radius: 26px;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.5s;
+    border-radius: 26px; overflow: hidden;
+  }
+  #disc-overlay.show { opacity: 1; }
+  .disc-text {
+    font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.5);
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+
+  /* ─── responsive ──────────────────────────────────── */
+  @media (max-width: 768px) {
+    header { padding: 16px 24px; }
+    section { padding: 40px 24px; }
+    .arch-grid { grid-template-columns: 1fr; }
+    .settings-panel { grid-template-columns: 1fr; }
+    .timeline { flex-direction: column; }
+    .timeline-step { border-right: none; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-hex">⬡</div>
+    <span>Symbiote</span>
+    <span class="version-badge">v0.1-dev</span>
+  </div>
+  <div class="header-links">
+    <a href="https://github.com" class="btn" target="_blank">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+    <button class="btn btn-primary" id="toggle-disc">Simulate Disconnect</button>
+  </div>
+</header>
+
+<main>
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-tag">Desktop Overlay · Browser Extension · Tauri + Three.js</div>
+    <h1>Liquid glass that bonds<br/>to Claude</h1>
+    <p class="hero-sub">
+      A sentient overlay that watches your Claude conversations, renders live generation state as refracted glass, and keeps a pixel-art companion in the corner.
+    </p>
+    <div class="hero-ctas">
+      <button class="btn btn-primary" onclick="document.getElementById('demo').scrollIntoView({behavior:'smooth'})">↓ Live Demo</button>
+      <button class="btn" onclick="document.getElementById('arch').scrollIntoView({behavior:'smooth'})">Architecture →</button>
+    </div>
+  </div>
+
+  <!-- LIVE DEMO -->
+  <section id="demo">
+    <div class="section-label">Interactive Preview</div>
+    <div class="section-title">The pill in every state</div>
+
+    <div class="stage">
+      <!-- mock desktop -->
+      <div class="desktop-frame">
+        <div class="desktop-titlebar">
+          <div class="traffic-light red"></div>
+          <div class="traffic-light yellow"></div>
+          <div class="traffic-light green"></div>
+          <div class="desktop-url">claude.ai/chat</div>
+        </div>
+        <div class="desktop-content">
+          <div class="claude-prompt" id="prompt-text">Write me a recursive Fibonacci function in Rust with memoization.</div>
+          <div class="claude-response">
+            <div class="claude-avatar">C</div>
+            <div class="claude-bubble" id="response-text">
+              <!-- populated by JS -->
+            </div>
+          </div>
+
+          <!-- PILL lives here -->
+          <div class="pill-wrapper" id="pill-wrapper">
+            <canvas id="pill-canvas"></canvas>
+            <div class="pill-inner">
+              <div class="pill-state-dot" id="state-dot"></div>
+              <canvas id="osc-canvas" class="companion-canvas" width="160" height="24" style="width:140px;height:24px;flex:1;image-rendering:auto;"></canvas>
+              <canvas id="comp-canvas" class="companion-canvas" width="48" height="64" style="width:32px;height:44px;"></canvas>
+            </div>
+            <div id="disc-overlay"><span class="disc-text">disconnected</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- state selector -->
+      <div class="state-controls" id="state-controls">
+        <button class="state-btn active" data-state="idle">
+          <span class="dot"></span> Idle
+        </button>
+        <button class="state-btn" data-state="thinking">
+          <span class="dot"></span> Thinking
+        </button>
+        <button class="state-btn" data-state="streaming_text">
+          <span class="dot"></span> Streaming text
+        </button>
+        <button class="state-btn" data-state="streaming_code">
+          <span class="dot"></span> Streaming code
+        </button>
+        <button class="state-btn" data-state="error">
+          <span class="dot"></span> Error / Glitch
+        </button>
+        <button class="state-btn" data-state="done">
+          <span class="dot"></span> Done ✦
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATE TIMELINE -->
+  <section>
+    <div class="section-label">State Machine</div>
+    <div class="section-title">Six animation states</div>
+    <div class="timeline" id="timeline">
+      <div class="timeline-step active" data-state="idle">
+        <div class="timeline-icon" style="background:rgba(136,146,176,0.1);">🌙</div>
+        <div class="timeline-name" style="color:var(--c-idle)">Idle</div>
+        <div class="timeline-desc">Cool silver-lavender. Bead minimised to tray. Companion slow-blinks.</div>
+      </div>
+      <div class="timeline-step" data-state="thinking">
+        <div class="timeline-icon" style="background:rgba(74,158,255,0.1);">🔵</div>
+        <div class="timeline-name" style="color:var(--c-think)">Thinking</div>
+        <div class="timeline-desc">Slow blue pulse. Companion antenna spins with eyes up.</div>
+      </div>
+      <div class="timeline-step" data-state="streaming_text">
+        <div class="timeline-icon" style="background:rgba(29,233,182,0.1);">〰️</div>
+        <div class="timeline-name" style="color:var(--c-text)">Streaming text</div>
+        <div class="timeline-desc">Warm teal river. EKG fires per SSE chunk. Eyes dart.</div>
+      </div>
+      <div class="timeline-step" data-state="streaming_code">
+        <div class="timeline-icon" style="background:rgba(255,171,64,0.1);">🔶</div>
+        <div class="timeline-name" style="color:var(--c-code)">Streaming code</div>
+        <div class="timeline-desc">Amber-orange. Companion hunches forward, arms extend — typing pose.</div>
+      </div>
+      <div class="timeline-step" data-state="error">
+        <div class="timeline-icon" style="background:rgba(255,68,68,0.1);">⚡</div>
+        <div class="timeline-name" style="color:var(--c-error)">Error / Glitch</div>
+        <div class="timeline-desc">RGB channel split. Sharp noise. X-eyes on companion.</div>
+      </div>
+      <div class="timeline-step" data-state="done">
+        <div class="timeline-icon" style="background:rgba(255,215,64,0.1);">✨</div>
+        <div class="timeline-name" style="color:var(--c-done)">Done</div>
+        <div class="timeline-desc">Gold shimmer + sparkle burst. Companion jumps with blush.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS PANEL -->
+  <section>
+    <div class="section-label">Settings</div>
+    <div class="section-title">Small panel — position, opacity, companion</div>
+    <div class="settings-panel">
+      <div class="setting-row">
+        <div class="setting-label">Opacity</div>
+        <div class="setting-control">
+          <input type="range" id="opacity-slider" min="20" max="100" value="72" />
+          <span class="setting-val" id="opacity-val">72%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">Pill edge</div>
+        <div class="setting-control" style="gap:6px;">
+          <button class="btn" id="edge-btn" style="font-size:11px;padding:5px 12px;">Bottom</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">Companion</div>
+        <div class="setting-control">
+          <div class="toggle on" id="comp-toggle"></div>
+          <span class="setting-val" id="comp-val">On</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">WS port</div>
+        <div class="setting-control">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--c-think);">ws://127.0.0.1:<b>7429</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section id="arch">
+    <div class="section-label">System Design</div>
+    <div class="section-title">Three-layer architecture</div>
+    <div class="arch-grid">
+      <div class="arch-card">
+        <div class="arch-card-icon" style="background:rgba(108,99,255,0.1);">🌐</div>
+        <h3>Browser Extension</h3>
+        <p>MV3 content script watches the claude.ai DOM via MutationObserver and intercepts the SSE fetch stream to fire precise chunk timestamps.</p>
+        <span class="tech-pill">Chrome MV3</span>
+        <span class="tech-pill">Firefox</span>
+        <span class="tech-pill">Arc</span>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-icon" style="background:rgba(29,233,182,0.1);">🔗</div>
+        <h3>WebSocket Bridge</h3>
+        <p>Background service worker maintains a persistent WebSocket to <code style="font-family:monospace;font-size:12px;color:var(--c-think);">ws://127.0.0.1:7429</code> with exponential backoff reconnect on drop.</p>
+        <span class="tech-pill">tokio-tungstenite</span>
+        <span class="tech-pill">JSON events</span>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-icon" style="background:rgba(255,171,64,0.1);">🖥️</div>
+        <h3>Desktop Overlay</h3>
+        <p>Tauri 2 transparent, always-on-top window. Three.js GLSL fragment shader renders the liquid glass capsule. OS APIs track the Claude window position.</p>
+        <span class="tech-pill">Tauri 2</span>
+        <span class="tech-pill">Three.js</span>
+        <span class="tech-pill">Rust</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>Symbiote — MIT License &nbsp;·&nbsp; <a href="https://github.com">github.com/symbiote</a> &nbsp;·&nbsp; Built with Tauri 2 + Three.js</p>
+</footer>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// PILL RENDERER — Canvas 2D liquid glass simulation
+// (replaces Three.js/WebGL for in-browser demo compatibility)
+// ══════════════════════════════════════════════════════════════════════
+const pillCanvas = document.getElementById('pill-canvas');
+const pillCtx    = pillCanvas.getContext('2d');
+
+function resizePill() {
+  const rect = pillCanvas.parentElement.getBoundingClientRect();
+  pillCanvas.width  = rect.width  * devicePixelRatio;
+  pillCanvas.height = rect.height * devicePixelRatio;
+  pillCanvas.style.width  = rect.width  + 'px';
+  pillCanvas.style.height = rect.height + 'px';
+}
+resizePill();
+window.addEventListener('resize', resizePill);
+
+// ─── State colours ────────────────────────────────────────────────────
+const STATE_COLORS = {
+  idle:           { base: '#8892b0', glow: 'rgba(136,146,176,0.4)', speed: 0.6, noise: 2.0 },
+  thinking:       { base: '#4a9eff', glow: 'rgba(74,158,255,0.5)',  speed: 1.8, noise: 3.0 },
+  streaming_text: { base: '#1de9b6', glow: 'rgba(29,233,182,0.5)',  speed: 3.0, noise: 5.0 },
+  streaming_code: { base: '#ffab40', glow: 'rgba(255,171,64,0.5)',  speed: 2.5, noise: 4.0 },
+  error:          { base: '#ff4444', glow: 'rgba(255,68,68,0.6)',   speed: 0.2, noise: 8.0 },
+  done:           { base: '#ffd740', glow: 'rgba(255,215,64,0.6)',  speed: 4.0, noise: 2.0 },
+};
+
+let currentState  = 'idle';
+let stateProgress = 0; // 0→1 for smooth transitions
+let prevColor     = STATE_COLORS.idle;
+let nextColor     = STATE_COLORS.idle;
+let pulseIntensity = 0;
+let glassOpacity  = 0.72;
+
+let t = 0;
+
+function lerpHex(a, b, k) {
+  const c = (s) => [parseInt(s.slice(1,3),16), parseInt(s.slice(3,5),16), parseInt(s.slice(5,7),16)];
+  const [ar,ag,ab] = c(a), [br,bg,bb] = c(b);
+  const r = Math.round(ar + (br-ar)*k);
+  const g = Math.round(ag + (bg-ag)*k);
+  const bl= Math.round(ab + (bb-ab)*k);
+  return `rgb(${r},${g},${bl})`;
+}
+
+function parseRgba(s) {
+  const m = s.match(/[\d.]+/g);
+  return m ? { r:+m[0], g:+m[1], b:+m[2], a:+(m[3]??1) } : {r:128,g:128,b:128,a:0.3};
+}
+function lerpRgba(a, b, k) {
+  const pa = parseRgba(a), pb = parseRgba(b);
+  return `rgba(${~~(pa.r+(pb.r-pa.r)*k)},${~~(pa.g+(pb.g-pa.g)*k)},${~~(pa.b+(pb.b-pa.b)*k)},${+(pa.a+(pb.a-pa.a)*k).toFixed(2)})`;
+}
+
+function smooth(v) { return v*v*(3-2*v); }
+
+function drawPill(timestamp) {
+  t = timestamp * 0.001;
+  stateProgress = Math.min(stateProgress + 0.03, 1);
+  const k = smooth(stateProgress);
+
+  const W = pillCanvas.width;
+  const H = pillCanvas.height;
+  const dpr = devicePixelRatio;
+  const w = W / dpr;
+  const h = H / dpr;
+
+  pillCtx.save();
+  pillCtx.scale(dpr, dpr);
+  pillCtx.clearRect(0, 0, w, h);
+
+  const col  = nextColor;
+  const prev = prevColor;
+  const spd  = prev.speed + (col.speed - prev.speed) * k;
+  const ns   = prev.noise + (col.noise - prev.noise) * k;
+
+  // ── pill shape ─────────────────────────────────────
+  const r = h * 0.5;
+  pillCtx.beginPath();
+  pillCtx.moveTo(r, 0);
+  pillCtx.lineTo(w - r, 0);
+  pillCtx.arcTo(w, 0, w, h, r);
+  pillCtx.lineTo(w, h);
+  pillCtx.arcTo(w, h, w-r, h, r);
+  pillCtx.lineTo(r, h);
+  pillCtx.arcTo(0, h, 0, h-r, r);
+  pillCtx.lineTo(0, r);
+  pillCtx.arcTo(0, 0, r, 0, r);
+  pillCtx.closePath();
+
+  // ── glass fill ─────────────────────────────────────
+  const baseColor = lerpHex(prev.base, col.base, k);
+  const glowColor = lerpRgba(prev.glow, col.glow, k);
+
+  // Animated noise via canvas gradient trick
+  const glitchX = currentState === 'error' ? (Math.random()-0.5)*6 : 0;
+
+  const grad = pillCtx.createLinearGradient(glitchX, 0, w + glitchX, h);
+  const phase = t * spd;
+
+  // Wave the gradient stops for liquid flow effect
+  const s1 = 0.3 + 0.15 * Math.sin(phase);
+  const s2 = 0.6 + 0.1  * Math.cos(phase * 0.7 + 1);
+
+  grad.addColorStop(0,   `${baseColor}cc`);
+  grad.addColorStop(s1,  `${baseColor}55`);
+  grad.addColorStop(s2,  `${baseColor}99`);
+  grad.addColorStop(1,   `${baseColor}bb`);
+
+  pillCtx.fillStyle = grad;
+  pillCtx.globalAlpha = glassOpacity;
+  pillCtx.fill();
+
+  // ── frosted glass border ───────────────────────────
+  pillCtx.globalAlpha = 1;
+  pillCtx.strokeStyle = `${baseColor}66`;
+  pillCtx.lineWidth = 1;
+  pillCtx.stroke();
+
+  // ── specular highlight ─────────────────────────────
+  const specGrad = pillCtx.createLinearGradient(0, 0, 0, h * 0.6);
+  specGrad.addColorStop(0, 'rgba(255,255,255,0.22)');
+  specGrad.addColorStop(0.4, 'rgba(255,255,255,0.05)');
+  specGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  pillCtx.fillStyle = specGrad;
+  pillCtx.fill();
+
+  // ── outer glow ─────────────────────────────────────
+  pillCtx.shadowColor = glowColor;
+  pillCtx.shadowBlur  = 20 + pulseIntensity * 16;
+  pillCtx.strokeStyle = glowColor;
+  pillCtx.lineWidth   = 1.5;
+  pillCtx.stroke();
+  pillCtx.shadowBlur = 0;
+
+  // ── error glitch scanlines ─────────────────────────
+  if (currentState === 'error' && Math.random() > 0.7) {
+    pillCtx.globalAlpha = 0.15;
+    for (let y = 0; y < h; y += 3) {
+      if (Math.random() > 0.6) {
+        pillCtx.fillStyle = Math.random() > 0.5 ? '#ff0000' : '#0000ff';
+        pillCtx.fillRect(0, y, w, 1);
+      }
+    }
+    pillCtx.globalAlpha = 1;
+  }
+
+  // ── done shimmer sparkles ──────────────────────────
+  if (currentState === 'done') {
+    const sparkCount = 4;
+    for (let i = 0; i < sparkCount; i++) {
+      const sx = (0.2 + 0.6*(i/sparkCount)) * w;
+      const sy = h * 0.5;
+      const angle = t * 4 + i * Math.PI * 0.5;
+      const px2 = sx + Math.cos(angle) * 6;
+      const py2 = sy + Math.sin(angle * 1.3) * 5;
+      pillCtx.beginPath();
+      pillCtx.arc(px2, py2, 1.5, 0, Math.PI*2);
+      pillCtx.fillStyle = `rgba(255,215,64,${0.5 + 0.5*Math.sin(t*6+i)})`;
+      pillCtx.fill();
+    }
+  }
+
+  // pulse ring
+  if (pulseIntensity > 0.05) {
+    pillCtx.beginPath();
+    pillCtx.moveTo(r, 0);
+    pillCtx.lineTo(w - r, 0);
+    pillCtx.arcTo(w, 0, w, h, r);
+    pillCtx.lineTo(w, h);
+    pillCtx.arcTo(w, h, w-r, h, r);
+    pillCtx.lineTo(r, h);
+    pillCtx.arcTo(0, h, 0, h-r, r);
+    pillCtx.lineTo(0, r);
+    pillCtx.arcTo(0, 0, r, 0, r);
+    pillCtx.closePath();
+    pillCtx.strokeStyle = `rgba(255,255,255,${pulseIntensity * 0.6})`;
+    pillCtx.lineWidth = pulseIntensity * 3;
+    pillCtx.stroke();
+    pulseIntensity *= 0.88;
+  }
+
+  pillCtx.restore();
+  requestAnimationFrame(drawPill);
+}
+requestAnimationFrame(drawPill);
+
+// ══════════════════════════════════════════════════════════════════════
+// OSCILLOSCOPE — EKG per chunk
+// ══════════════════════════════════════════════════════════════════════
+const oscCanvas = document.getElementById('osc-canvas');
+const oscCtx    = oscCanvas.getContext('2d');
+const POINTS    = new Float32Array(160).fill(0);
+let lastPulse   = 0;
+let oscRunning  = false;
+let oscRaf      = null;
+
+function oscPulse() {
+  const now = performance.now();
+  const gap = Math.min(now - lastPulse, 1500);
+  lastPulse = now;
+  const amp = Math.max(0.25, 1.0 - gap / 900);
+  POINTS[POINTS.length - 4] = -amp * 0.3;
+  POINTS[POINTS.length - 3] =  amp;
+  POINTS[POINTS.length - 2] = -amp * 0.5;
+  POINTS[POINTS.length - 1] =  0;
+  pulseIntensity = amp;
+}
+
+function drawOsc() {
+  const W = oscCanvas.width;
+  const H = oscCanvas.height;
+
+  // pick line colour from state
+  const lineCol = {
+    idle: 'rgba(136,146,176,0.5)',
+    thinking: 'rgba(74,158,255,0.8)',
+    streaming_text: 'rgba(29,233,182,0.9)',
+    streaming_code: 'rgba(255,171,64,0.9)',
+    error: 'rgba(255,68,68,0.9)',
+    done: 'rgba(255,215,64,0.9)',
+  }[currentState] || 'rgba(136,146,176,0.5)';
+
+  oscCtx.clearRect(0, 0, W, H);
+  oscCtx.beginPath();
+  const mid = H / 2;
+  for (let i = 0; i < POINTS.length; i++) {
+    const x = (i / POINTS.length) * W;
+    const y = mid - POINTS[i] * (H * 0.42);
+    i === 0 ? oscCtx.moveTo(x, y) : oscCtx.lineTo(x, y);
+  }
+  oscCtx.strokeStyle = lineCol;
+  oscCtx.lineWidth   = 1.5;
+  oscCtx.lineJoin    = 'round';
+  oscCtx.shadowBlur  = 6;
+  oscCtx.shadowColor = lineCol;
+  oscCtx.stroke();
+  oscCtx.shadowBlur = 0;
+}
+
+function oscTick() {
+  if (!oscRunning) { oscRaf = null; return; }
+  oscRaf = requestAnimationFrame(oscTick);
+  POINTS.copyWithin(0, 1);
+  POINTS[POINTS.length - 1] = 0;
+  drawOsc();
+}
+
+function oscStart() {
+  oscRunning = true;
+  if (!oscRaf) oscTick();
+}
+function oscStop() {
+  oscRunning = false;
+}
+
+drawOsc(); // initial flat line
+
+// ══════════════════════════════════════════════════════════════════════
+// COMPANION — pixel-art sprite
+// ══════════════════════════════════════════════════════════════════════
+const compCanvas = document.getElementById('comp-canvas');
+const compCtx    = compCanvas.getContext('2d');
+let compFrame    = 0;
+let compTimer    = 0;
+let compVisible  = true;
+
+const STATE_FPS   = { idle:4, thinking:8, streaming_text:12, streaming_code:8, error:12, done:8 };
+const FRAME_COUNT = { idle:8, thinking:8, streaming_text:4,  streaming_code:4, error:3,  done:6  };
+
+function px(ctx, S, col, row, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(col*S, row*S, S, S);
+}
+
+function drawBase(ctx, S, eyeOpen=true, blush=false) {
+  // Body
+  [[2,4],[3,4],[4,4],[5,4],[2,5],[3,5],[4,5],[5,5]].forEach(([c,r])=>px(ctx,S,c,r,'#b0c4de'));
+  [[2,6],[3,6],[4,6],[5,6]].forEach(([c,r])=>px(ctx,S,c,r,'#8ca9c0'));
+  // Head
+  for(let c=2;c<=5;c++) for(let r=1;r<=3;r++) px(ctx,S,c,r,'#ffe0b2');
+  // Eyes
+  if(eyeOpen) { px(ctx,S,2,2,'#333'); px(ctx,S,5,2,'#333'); }
+  else        { [[2,3],[3,3],[4,3],[5,3]].forEach(([c,r])=>px(ctx,S,c,r,'#666')); }
+  // Blush
+  if(blush) { px(ctx,S,1,3,'#ffaaaa'); px(ctx,S,6,3,'#ffaaaa'); }
+  // Legs
+  px(ctx,S,2,7,'#8ca9c0'); px(ctx,S,5,7,'#8ca9c0');
+}
+
+function drawCompanion(state, frame) {
+  if (!compVisible) { compCtx.clearRect(0,0,48,64); return; }
+  const ctx = compCtx;
+  const S = 6;
+  ctx.clearRect(0, 0, 48, 64);
+
+  switch(state) {
+    case 'idle': {
+      ctx.save();
+      if(frame % 4 < 2) ctx.translate(1, 0);
+      drawBase(ctx, S, frame < 6);
+      ctx.restore();
+      break;
+    }
+    case 'thinking': {
+      drawBase(ctx, S, true);
+      const angle = (frame/8) * Math.PI * 2;
+      const ax = 24 + Math.cos(angle)*4;
+      const ay =  4 + Math.sin(angle)*2;
+      ctx.beginPath(); ctx.arc(ax,ay,2,0,Math.PI*2);
+      ctx.fillStyle='#6eb5ff'; ctx.fill();
+      px(ctx,S,2,1,'#222'); px(ctx,S,5,1,'#222');
+      break;
+    }
+    case 'streaming_text': {
+      drawBase(ctx, S, true);
+      if(frame%2===0) { px(ctx,S,2,2,'#1de9b6'); px(ctx,S,3,2,'#1de9b6'); }
+      else            { px(ctx,S,4,2,'#1de9b6'); px(ctx,S,5,2,'#1de9b6'); }
+      break;
+    }
+    case 'streaming_code': {
+      drawBase(ctx, S, true);
+      const armY = frame%2===0 ? 5 : 6;
+      px(ctx,S,1,armY,'#ffab40'); px(ctx,S,6,armY,'#ffab40');
+      px(ctx,S,2,2,'#ffab40'); px(ctx,S,5,2,'#ffab40');
+      break;
+    }
+    case 'error': {
+      const off = frame % 3;
+      ctx.save(); ctx.globalAlpha = 0.55; ctx.translate(-off, 0);
+      drawBase(ctx, S, true);
+      ctx.restore();
+      ctx.save(); ctx.globalAlpha = 0.4; ctx.translate(off, 0);
+      ctx.fillStyle='#ff3333';
+      for(let c=2;c<=5;c++) for(let r=1;r<=7;r++) { ctx.fillRect(c*S,r*S,S,S); }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      drawBase(ctx, S, false);
+      px(ctx,S,2,2,'#ff3333'); px(ctx,S,3,3,'#ff3333');
+      px(ctx,S,5,2,'#ff3333'); px(ctx,S,4,3,'#ff3333');
+      break;
+    }
+    case 'done': {
+      const jumpY = frame < 2 ? -S : 0;
+      ctx.save(); ctx.translate(0, jumpY);
+      drawBase(ctx, S, true, true);
+      ctx.restore();
+      if(frame < 3) {
+        px(ctx,S,0,0,'#ffd700'); px(ctx,S,7,1,'#ffd700');
+        px(ctx,S,1,6,'#ffd700');
+      }
+      break;
+    }
+    default: drawBase(ctx, S, true);
+  }
+}
+
+// companion animation loop (runs at 60fps, advances frames by state fps)
+function compTick() {
+  requestAnimationFrame(compTick);
+  compTimer++;
+  const fps = STATE_FPS[currentState] ?? 4;
+  const interval = Math.round(60 / fps);
+  if(compTimer >= interval) {
+    compTimer = 0;
+    compFrame = (compFrame + 1) % (FRAME_COUNT[currentState] ?? 4);
+  }
+  drawCompanion(currentState, compFrame);
+}
+compTick();
+
+// ══════════════════════════════════════════════════════════════════════
+// STATE TRANSITION — wires controls → pill + osc + companion
+// ══════════════════════════════════════════════════════════════════════
+const stateDot = document.getElementById('state-dot');
+let chunkInterval = null;
+
+const RESPONSE_COPY = {
+  idle:           '',
+  thinking:       'Thinking…',
+  streaming_text: 'Sure! Memoized Fibonacci in Rust stores previously computed values in a\u00a0',
+  streaming_code: '',
+  error:          '<span style="color:#ff6b6b">⚠ Network error — retrying…</span>',
+  done:           'Here\'s the complete implementation with a HashMap-based cache. The function is O(n) time and space, computing each Fibonacci number exactly once. ✓',
+};
+
+const CODE_SAMPLE = `<div class="code-preview">fn fib_memo(n: u64, memo: &mut HashMap&lt;u64, u64&gt;) -&gt; u64 {
+  if n &lt;= 1 { return n; }
+  if let Some(&amp;v) = memo.get(&amp;n) { return v; }
+  let res = fib_memo(n-1, memo) + fib_memo(n-2, memo);
+  memo.insert(n, res);
+  res
+}<span class="cursor-blink"></span></div>`;
+
+function setState(state) {
+  prevColor     = nextColor;
+  nextColor     = STATE_COLORS[state];
+  stateProgress = 0;
+  currentState  = state;
+  compFrame     = 0;
+
+  // dot colour
+  stateDot.style.background  = nextColor.base;
+  stateDot.style.boxShadow   = `0 0 8px ${nextColor.glow}`;
+
+  // osc
+  clearInterval(chunkInterval);
+  if (['streaming_text','streaming_code','thinking'].includes(state)) {
+    oscStart();
+    const rate = state === 'streaming_code' ? 280 : state === 'streaming_text' ? 160 : 600;
+    chunkInterval = setInterval(oscPulse, rate);
+  } else {
+    oscStop();
+    if (state === 'done' || state === 'error') oscPulse();
+  }
+
+  // response copy
+  const bubble = document.getElementById('response-text');
+  if (state === 'streaming_code') {
+    bubble.innerHTML = (RESPONSE_COPY.streaming_text || '') + CODE_SAMPLE;
+  } else {
+    const text = RESPONSE_COPY[state] || '';
+    bubble.innerHTML = text + (state === 'streaming_text' ? '<span class="cursor-blink"></span>' : '');
+  }
+
+  // timeline
+  document.querySelectorAll('.timeline-step').forEach(el => {
+    el.classList.toggle('active', el.dataset.state === state);
+  });
+
+  // state btns
+  document.querySelectorAll('.state-btn').forEach(el => {
+    el.classList.toggle('active', el.dataset.state === state);
+  });
+}
+
+// wire state buttons
+document.querySelectorAll('.state-btn').forEach(btn => {
+  btn.addEventListener('click', () => setState(btn.dataset.state));
+});
+document.querySelectorAll('.timeline-step').forEach(step => {
+  step.addEventListener('click', () => setState(step.dataset.state));
+});
+
+// boot
+setState('idle');
+setTimeout(() => setState('thinking'), 800);
+setTimeout(() => setState('streaming_text'), 2000);
+
+// auto-cycle demo on load
+let autoCycle = true;
+const CYCLE = ['idle','thinking','streaming_text','streaming_code','done','idle'];
+let cycleIdx = 0;
+function nextCycle() {
+  if (!autoCycle) return;
+  setState(CYCLE[cycleIdx % CYCLE.length]);
+  cycleIdx++;
+  const delays = [1200, 1400, 2000, 2200, 1800, 1200];
+  setTimeout(nextCycle, delays[(cycleIdx-1) % delays.length]);
+}
+setTimeout(nextCycle, 600);
+
+// stop auto-cycle when user clicks
+document.getElementById('state-controls').addEventListener('click', () => { autoCycle = false; }, { once: true });
+document.getElementById('timeline').addEventListener('click', () => { autoCycle = false; }, { once: true });
+
+// ══════════════════════════════════════════════════════════════════════
+// DISCONNECT SIMULATION
+// ══════════════════════════════════════════════════════════════════════
+let disconnected = false;
+const discOverlay  = document.getElementById('disc-overlay');
+const discBtn      = document.getElementById('toggle-disc');
+
+discBtn.addEventListener('click', () => {
+  disconnected = !disconnected;
+  discOverlay.classList.toggle('show', disconnected);
+  glassOpacity = disconnected ? 0.25 : 0.72;
+  discBtn.textContent = disconnected ? 'Reconnect' : 'Simulate Disconnect';
+  discBtn.style.background = disconnected ? 'rgba(255,68,68,0.2)' : '';
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// SETTINGS PANEL
+// ══════════════════════════════════════════════════════════════════════
+const opacitySlider = document.getElementById('opacity-slider');
+const opacityVal    = document.getElementById('opacity-val');
+opacitySlider.addEventListener('input', () => {
+  const v = +opacitySlider.value;
+  glassOpacity = v / 100;
+  opacityVal.textContent = v + '%';
+});
+
+const edges = ['Bottom', 'Right', 'Top', 'Left'];
+let edgeIdx = 0;
+document.getElementById('edge-btn').addEventListener('click', function() {
+  edgeIdx = (edgeIdx + 1) % edges.length;
+  this.textContent = edges[edgeIdx];
+  const pillWrapper = document.getElementById('pill-wrapper');
+  const positions = [
+    { bottom:'16px', right:'16px', top:'auto', left:'auto', transform:'rotate(0deg)' },
+    { bottom:'auto', right:'0',    top:'50%',  left:'auto', transform:'translateY(-50%) rotate(90deg)' },
+    { bottom:'auto', right:'16px', top:'16px', left:'auto', transform:'rotate(0deg)' },
+    { bottom:'auto', right:'auto', top:'50%',  left:'0',    transform:'translateY(-50%) rotate(90deg)' },
+  ];
+  Object.assign(pillWrapper.style, positions[edgeIdx]);
+});
+
+const compToggle = document.getElementById('comp-toggle');
+const compVal    = document.getElementById('comp-val');
+compToggle.addEventListener('click', () => {
+  compVisible = !compVisible;
+  compToggle.classList.toggle('on', compVisible);
+  compVal.textContent = compVisible ? 'On' : 'Off';
+  document.getElementById('comp-canvas').style.opacity = compVisible ? '1' : '0';
+});
+</script>
+</body>
+</html>
