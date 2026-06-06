@@ -5,14 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Symbiote - Claude Style</title>
 <style>
-  :root {
-    --bg-dark: #161514; /* Anthropic's sophisticated warm charcoal */
-    --border-light: rgba(230, 220, 210, 0.08);
-    --text-muted: #8d8a86;
-    /* A silky, high-end copper/linen gradient (premium, not neon) */
-    --claude-gradient: linear-gradient(90deg, #D59F82, #F4E0D4, #C58167, #D59F82);
-  }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
@@ -30,47 +22,32 @@
   }
 
   body.debug-mode {
-    background: #0d0d0f;
+    background: #0a0a0b;
   }
 
-  /* ─── The Claude Pill ───────────────────────────────── */
+  /* ─── The Pill ──────────────────────────────────────── */
   #pill-container {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
-    background: var(--bg-dark);
-    padding: 10px 24px 10px 18px;
+    gap: 11px;
+    background: #1a1a1a;
+    padding: 10px 22px 10px 16px;
     border-radius: 999px;
-    border: 1px solid var(--border-light);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    transform-origin: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
     cursor: pointer;
-    min-width: 140px;
   }
 
   #pill-container:active {
-    transform: scale(0.96);
+    transform: scale(0.97);
   }
 
-  #pill-container.thinking {
-    border-color: rgba(213, 159, 130, 0.25);
-    box-shadow: 0 6px 32px rgba(213, 159, 130, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  }
-
-  #pill-container.streaming_text {
-    border-color: rgba(155, 204, 195, 0.2);
-  }
-  
-  #pill-container.streaming_code {
-    border-color: rgba(212, 184, 126, 0.2);
-  }
-
-  /* ─── Sparkle Icon ──────────────────────────────────── */
+  /* ─── Icon ──────────────────────────────────────────── */
   .sparkle-wrapper {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -80,54 +57,36 @@
   .sparkle-svg {
     width: 100%;
     height: 100%;
-    fill: #e3e3e3;
-    transition: transform 0.3s ease, fill 0.3s ease;
+    fill: #7f7f7f;
+    transition: fill 0.3s ease;
   }
 
-  /* Thinking Animation */
-  #pill-container.thinking .sparkle-svg {
+  /* Thinking — spin */
+  #pill-container.active .sparkle-svg {
     fill: url(#claude-grad);
-    animation: pulse-spin 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    animation: spin 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
 
-  /* Streaming Animations */
-  #pill-container.streaming_text .sparkle-svg,
-  #pill-container.streaming_code .sparkle-svg {
-    animation: pulse-gentle 1.5s ease-in-out infinite;
+  /* Error — red, no animation */
+  #pill-container.error .sparkle-svg {
+    fill: #e05252;
+    animation: none;
   }
 
-  @keyframes pulse-spin {
-    0% { transform: rotate(0deg) scale(1); }
-    50% { transform: rotate(90deg) scale(1.15); }
+  @keyframes spin {
+    0%   { transform: rotate(0deg) scale(1); }
+    50%  { transform: rotate(90deg) scale(1.12); }
     100% { transform: rotate(180deg) scale(1); }
   }
 
-  @keyframes pulse-gentle {
-    0%, 100% { transform: scale(1); opacity: 0.8; }
-    50% { transform: scale(1.1); opacity: 1; }
-  }
-
-  /* ─── Text Styling ──────────────────────────────────── */
+  /* ─── Text ──────────────────────────────────────────── */
   #status-text {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 500;
-    letter-spacing: 0.3px;
-    color: #e3e3e3;
-    transition: opacity 0.2s ease;
+    letter-spacing: 0.2px;
+    color: #ffffff;
     white-space: nowrap;
-  }
-
-  #pill-container.thinking #status-text {
-    background: var(--claude-gradient);
-    background-size: 300% 100%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradient-shift 3s linear infinite;
-  }
-
-  @keyframes gradient-shift {
-    0% { background-position: 100% 50%; }
-    100% { background-position: -200% 50%; }
+    transition: opacity 0.2s ease;
   }
 
   /* ─── Debug Controls ────────────────────────────────── */
@@ -184,35 +143,33 @@
   const sparkle = document.querySelector('.sparkle-svg');
 
   const STATES = {
-    idle:           { label: 'Idle',                 color: '#8d8a86' },
-    thinking:       { label: 'Claude is thinking…',  color: 'url(#claude-grad)' },
-    streaming_text: { label: 'Writing…',             color: '#9bccc3' }, /* Premium Sage */
-    streaming_code: { label: 'Writing code…',        color: '#d4b87e' }, /* Premium Muted Gold */
-    error:          { label: 'Something went wrong', color: '#c46c6c' }, /* Muted Brick Red */
-    done:           { label: 'Done ✓',               color: '#a0b3c6' }, /* Sleek Slate Blue */
-    disconnected:   { label: 'Disconnected',         color: '#5e5c5a' }
+    idle:           { label: 'Idle',                 icon: 'grey' },
+    thinking:       { label: 'Claude is thinking…',  icon: 'active' },
+    streaming_text: { label: 'Writing…',             icon: 'active' },
+    streaming_code: { label: 'Writing code…',        icon: 'active' },
+    error:          { label: 'Something went wrong', icon: 'error' },
+    done:           { label: 'Done',                 icon: 'grey' },
+    disconnected:   { label: 'Disconnected',         icon: 'grey' }
   };
 
   function setState(state) {
     const config = STATES[state] || STATES.idle;
-    
-    // Reset classes
-    pill.className = '';
-    
-    // Add active state class if applicable
-    if (['thinking', 'streaming_text', 'streaming_code'].includes(state)) {
-      pill.classList.add(state);
-    }
-    
-    // Update text
-    statusText.textContent = config.label;
-    
-    // Update icon color (unless it's thinking, which CSS gradient handles)
-    if (state !== 'thinking') {
-      sparkle.style.fill = config.color;
+
+    // Reset all state classes
+    pill.classList.remove('active', 'error');
+
+    // Apply the right class for icon behavior
+    if (config.icon === 'active') {
+      pill.classList.add('active');
+      sparkle.style.fill = '';       // CSS gradient takes over
+    } else if (config.icon === 'error') {
+      pill.classList.add('error');
+      sparkle.style.fill = '';       // CSS red takes over
     } else {
-      sparkle.style.fill = ''; // Let CSS take over
+      sparkle.style.fill = '#7f7f7f'; // grey
     }
+
+    statusText.textContent = config.label;
   }
 
   // --- WebSocket (module-scoped so focusClaude can reach it) ---
