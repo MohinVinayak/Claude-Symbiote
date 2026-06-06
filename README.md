@@ -24,28 +24,34 @@ Symbiote is a 100% pure browser extension built with Manifest V3. It does not re
 - `background.js`: The central Service Worker that manages global state, handles multi-tab logic, and broadcasts updates.
 - `global_ui.js`: Injected into `<all_urls>` to render the Shadow DOM floating pill, drag logic, and PiP window management.
 
-## Installation for Development
+## Installation & Usage
 
-1. Open Chrome and navigate to `chrome://extensions`.
-2. Enable **Developer mode** in the top right.
-3. Click **Load unpacked** and select the folder containing this repository.
-4. Refresh your tabs to see the pill!
+You can download and run Symbiote completely free directly from this repository!
+
+### For Chrome / Edge / Brave
+1. Download **`symbiote-extension-chrome.zip`** from the files above and extract it to a folder on your computer.
+2. Open Chrome and navigate to `chrome://extensions`.
+3. Enable **Developer mode** in the top right corner.
+4. Click **Load unpacked** and select the folder you just extracted.
+5. Pin the extension to your toolbar, open Claude.ai, and watch the magic happen!
+
+### For Firefox
+1. Download **`symbiote-extension-firefox.zip`** from the files above and extract it to a folder.
+2. Open Firefox and navigate to `about:debugging`.
+3. Click on **This Firefox** in the left menu.
+4. Click **Load Temporary Add-on...** and select the `manifest.json` file inside the extracted folder.
+
+*(Note: Firefox requires you to reload temporary add-ons when you restart the browser. For permanent installation, you can download it from the official Firefox Add-ons store once published).*
 
 ## Publishing to Web Stores
 
-The `manifest.json` is configured to be cross-compatible with both Chrome and Firefox out of the box.
-
-### Chrome Web Store
-1. Zip the extension files: `manifest.json`, `background.js`, `content.js`, `intercept.js`, `global_ui.js`, and the `icons/` folder.
-2. Go to the [Chrome Developer Dashboard](https://chrome.google.com/webstore/devconsole/).
-3. Create a **New Item**, upload the `.zip` file, and fill out the store listing details.
-4. Under Privacy, declare the "Storage" and "Tabs" permissions.
+Due to strict differences in how Chrome and Firefox handle Manifest V3 Service Workers, the repository contains two separate built zip files.
 
 ### Firefox Add-ons (AMO)
-1. Zip the exact same files as above.
-2. Go to the [Firefox Extension Workshop Developer Hub](https://addons.mozilla.org/en-US/developers/).
-3. Submit a new Add-on, upload the `.zip`, and wait for the automated linter to approve the pure JavaScript files.
-4. Note: The `manifest.json` already contains the required `browser_specific_settings` block for Firefox.
+Upload the **`symbiote-extension-firefox.zip`** to the Firefox Extension Workshop. This zip includes the mandatory `data_collection_permissions` and fallback `scripts` required by Mozilla.
+
+### Chrome Web Store
+Upload the **`symbiote-extension-chrome.zip`** to the Chrome Developer Dashboard. This zip omits the Firefox-specific properties that Chrome's strict Manifest V3 parser rejects.
 
 ## Permissions Required
 - `tabs`: Used to query open tabs for broadcasting state updates and jumping to the active Claude tab.
