@@ -1,10 +1,10 @@
 /**
- * content.js — runs inside every claude.ai page.
+ * content.js — runs inside every claude.ai page (ISOLATED world).
  *
  * Responsibilities:
- *  1. Detect generation state via DOM mutations + SSE stream interception
- *  2. Maintain local state machine
- *  3. Post messages to background service worker (which relays over WebSocket)
+ *  1. Detect generation state via DOM mutations
+ *  2. Listen for SSE chunk events from intercept.js (MAIN world)
+ *  3. Post state to background service worker via chrome.runtime.sendMessage
  */
 
 // ── State machine ─────────────────────────────────────────────────────────────
@@ -39,8 +39,6 @@ function send(payload) {
 }
 
 // ── DOM sentinel selectors ────────────────────────────────────────────────────
-// These target structural elements — more resilient than class names.
-// claude.ai renders a "stop" button while generating; its presence = active stream.
 const SELECTORS = {
   stopButton:    '[aria-label*="Stop"], button[data-testid*="stop"]',
   streamingText: '[data-is-streaming="true"], .font-claude-message',
@@ -62,7 +60,7 @@ const observer = new MutationObserver((mutations) => {
 observer.observe(document.body, {
   childList: true,
   subtree: true,
-  characterData: false, // avoid character-level noise
+  characterData: false,
 });
 
 function handleMutations() {
@@ -82,7 +80,6 @@ function handleMutations() {
   }
 
   if (stopBtn) {
-    // Active stream — check if inside a code block
     const isCode = codeBlock && isActivelyGrowing(codeBlock);
     if (isCode && !codeBlockOpen) {
       codeBlockOpen = true;
@@ -94,14 +91,12 @@ function handleMutations() {
       transition(STATES.STREAMING_TEXT, "state_change");
     }
 
-    // Signal a chunk arrived
     const now = Date.now();
-    if (now - lastChunkTime > 50) { // debounce 50ms
+    if (now - lastChunkTime > 50) {
       lastChunkTime = now;
       send({ state: currentState, event: "chunk", ts_ms: now });
     }
 
-    // Set a timer — if no mutation for 1.5s and stop btn gone = done
     clearTimeout(streamingTimer);
     streamingTimer = setTimeout(checkDone, 1500);
     return;
@@ -133,41 +128,7 @@ function isActivelyGrowing(el) {
   return len > prev;
 }
 
-// ── SSE stream interception ───────────────────────────────────────────────────
-// Intercept fetch to catch the SSE stream URL — gives us precise chunk timing.
-// Injected as a page script to access window.fetch.
-const pageScript = document.createElement("script");
-pageScript.textContent = `
-(function() {
-  const origFetch = window.fetch;
-  window.fetch = async function(input, init) {
-    const url = typeof input === "string" ? input : input?.url ?? "";
-    const resp = await origFetch.apply(this, arguments);
-    if (url.includes("/api/") && url.includes("stream")) {
-      const clone = resp.clone();
-      const reader = clone.body.getReader();
-      const decoder = new TextDecoder();
-      (async () => {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const text = decoder.decode(value, { stream: true });
-          if (text.includes("data:")) {
-            window.dispatchEvent(new CustomEvent("__symbiote_chunk__", {
-              detail: { ts: Date.now() }
-            }));
-          }
-        }
-      })().catch(() => {});
-    }
-    return resp;
-  };
-})();
-`;
-(document.head || document.documentElement).appendChild(pageScript);
-pageScript.remove();
-
-// Listen for SSE chunks from page script
+// ── SSE chunk listener (from intercept.js in MAIN world) ─────────────────────
 window.addEventListener("__symbiote_chunk__", (e) => {
   const now = e.detail.ts;
   if (now - lastChunkTime > 30) {

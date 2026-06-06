@@ -2,10 +2,11 @@
   "manifest_version": 3,
   "name": "Symbiote — Claude Monitor",
   "version": "1.0.0",
-  "description": "Streams Claude.ai generation state to the Symbiote desktop overlay.",
+  "description": "Shows live Claude.ai generation status in a sleek pill overlay.",
   "permissions": [
     "tabs",
-    "alarms"
+    "alarms",
+    "sidePanel"
   ],
   "host_permissions": [
     "*://*.claude.ai/*"
@@ -18,8 +19,22 @@
       "matches": ["*://*.claude.ai/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.claude.ai/*"],
+      "js": ["intercept.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
