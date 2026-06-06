@@ -35,7 +35,11 @@ function transition(newState, event, metadata = null) {
 }
 
 function send(payload) {
-  chrome.runtime.sendMessage({ type: "CLAUDE_EVENT", payload });
+  try {
+    if (chrome.runtime && chrome.runtime.id) {
+      chrome.runtime.sendMessage({ type: "CLAUDE_EVENT", payload }).catch(() => {});
+    }
+  } catch (e) {}
 }
 
 // ── DOM sentinel selectors ────────────────────────────────────────────────────

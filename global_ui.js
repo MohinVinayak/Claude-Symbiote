@@ -107,7 +107,11 @@ function injectUI() {
   
   // Click to focus Claude tab
   pill.addEventListener('click', () => {
-    chrome.runtime.sendMessage({ type: 'FOCUS_CLAUDE' }).catch(() => {});
+    try {
+      if (chrome.runtime && chrome.runtime.id) {
+        chrome.runtime.sendMessage({ type: 'FOCUS_CLAUDE' }).catch(() => {});
+      }
+    } catch (e) {}
   });
 
   return {
@@ -149,15 +153,22 @@ function updateUI(state) {
 }
 
 // Request initial state on load
-chrome.runtime.sendMessage({ type: 'GET_STATE' }, (response) => {
-  if (response && response.state) {
-    updateUI(response.state);
-  }
-});
+try {
+  if (chrome.runtime && chrome.runtime.id) {
+    chrome.runtime.sendMessage({ type: 'GET_STATE' }, (response) => {
+      if (chrome.runtime.lastError) return; // Ignore disconnected port errors
+      if (response && response.state) {
+        updateUI(response.state);
+      }
+    });
 
-// Listen for broadcasted state updates
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'STATE_UPDATE' && msg.payload?.state) {
-    updateUI(msg.payload.state);
+    // Listen for broadcasted state updates
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.type === 'STATE_UPDATE' && msg.payload?.state) {
+        updateUI(msg.payload.state);
+      }
+    });
   }
-});
+} catch (e) {
+  // Extension context invalidated (happens on reload).
+}
