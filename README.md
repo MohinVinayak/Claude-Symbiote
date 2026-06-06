@@ -43,16 +43,6 @@ You can download and run Symbiote completely free directly from this repository!
 
 *(Note: Firefox requires you to reload temporary add-ons when you restart the browser. For permanent installation, you can download it from the official Firefox Add-ons store once published).*
 
-## Publishing to Web Stores
-
-Due to strict differences in how Chrome and Firefox handle Manifest V3 Service Workers, the repository contains two separate built zip files.
-
-### Firefox Add-ons (AMO)
-Upload the **`symbiote-extension-firefox.zip`** to the Firefox Extension Workshop. This zip includes the mandatory `data_collection_permissions` and fallback `scripts` required by Mozilla.
-
-### Chrome Web Store
-Upload the **`symbiote-extension-chrome.zip`** to the Chrome Developer Dashboard. This zip omits the Firefox-specific properties that Chrome's strict Manifest V3 parser rejects.
-
 ## Permissions Required
 - `tabs`: Used to query open tabs for broadcasting state updates and jumping to the active Claude tab.
 - `storage`: Used to persist the global UI visibility state (so if you hide the pill, it stays hidden on reload).
